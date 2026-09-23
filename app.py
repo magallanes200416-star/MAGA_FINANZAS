@@ -1,3 +1,4 @@
+import os
 from flask import Flask, render_template_string, request
 from calculadora_salarial import calcular_ajuste_salarial_petrolera, CATALOGO_CARGOS
 
@@ -148,7 +149,7 @@ HTML_TEMPLATE = """
             </div>
             
             <label>Años de Antigüedad:</label>
-            <input type="number" name="anos_antiguedad" required value="{{ request.form.get('anos_antiguedad', 2) }}">
+            <input type="number" name="anos_antiguedad" required value="{{ anos_val }}">
             
             <label>Nivel Profesional / Académico:</label>
             <select name="nivel_profesionalismo">
@@ -161,20 +162,20 @@ HTML_TEMPLATE = """
             </select>
             
             <label>Inflación Anual Estimada (%):</label>
-            <input type="number" step="0.1" name="porcentaje_inflacion" required value="{{ request.form.get('porcentaje_inflacion', 10) }}">
+            <input type="number" step="0.1" name="porcentaje_inflacion" required value="{{ inflacion_val }}">
             
             <label>Índice de Competitividad del Mercado Petrolero:</label>
-            <input type="number" step="0.01" name="indice_competitividad" required value="{{ request.form.get('indice_competitividad', 1.05) }}">
+            <input type="number" step="0.01" name="indice_competitividad" required value="{{ competitividad_val }}">
 
             <label>Entorno u Ubicación Operativa del Puesto:</label>
             <select name="factor_riesgo_operativo">
                 <option value="oficina" {% if entorno_seleccionado == 'oficina' %}selected{% endif %}>Oficina</option>
                 <option value="directivo" {% if entorno_seleccionado == 'directivo' %}selected{% endif %}>Directivo</option>
-                <option value="operativo_campo" {% if entorno_seleccionado == 'operativo_campo' or not entorno_seleccionado %}selected{% endif %}>Operativo en campo</option>
+                <option value="operativo_campo" {% if entorno_seleccionado == 'operativo_campo' %}selected{% endif %}>Operativo en campo</option>
             </select>
 
             <div class="checkbox-container">
-                <input type="checkbox" id="hse" name="tiene_certificacion_hse" {% if request.form.get('tiene_certificacion_hse') %}checked{% endif %}>
+                <input type="checkbox" id="hse" name="tiene_certificacion_hse" {% if hse_val %}checked{% endif %}>
                 <label for="hse" style="margin-top: 0; display: inline; cursor: pointer;">Posee Certificaciones HSE / Especializadas Vigentes</label>
             </div>
             
@@ -207,23 +208,32 @@ def index():
     nivel_seleccionado = "ingeniero"
     entorno_seleccionado = "operativo_campo"
     salario_base_val = CATALOGO_CARGOS["supervisor_campo"]["base"]
+    anos_val = 2
+    inflacion_val = 10.0
+    competitividad_val = 1.05
+    hse_val = False
     
     if request.method == "POST":
         try:
-            cargo_seleccionado = request.form["cargo_clave"]
-            salario_base_val = float(request.form["salario_base"])
-            antiguedad = int(request.form["anos_antiguedad"])
-            nivel_seleccionado = request.form["nivel_profesionalismo"]
-            inflacion = float(request.form["porcentaje_inflacion"])
-            competitividad = float(request.form["indice_competitividad"])
-            entorno_seleccionado = request.form["factor_riesgo_operativo"]
-            hse = True if request.form.get("tiene_certificacion_hse") else False
+            cargo_seleccionado = request.form.get("cargo_clave", "supervisor_campo")
+            
+            raw_salario = request.form.get("salario_base", "")
+            salario_base_val = float(raw_salario) if raw_salario else CATALOGO_CARGOS.get(cargo_seleccionado, {"base": 400.0})["base"]
+            
+            anos_val = int(request.form.get("anos_antiguedad", 2) or 2)
+            nivel_seleccionado = request.form.get("nivel_profesionalismo", "ingeniero")
+            inflacion_val = float(request.form.get("porcentaje_inflacion", 10.0) or 10.0)
+            competitividad_val = float(request.form.get("indice_competitividad", 1.05) or 1.05)
+            entorno_seleccionado = request.form.get("factor_riesgo_operativo", "operativo_campo")
+            hse_val = True if request.form.get("tiene_certificacion_hse") else False
             
             resultado = calcular_ajuste_salarial_petrolera(
-                cargo_seleccionado, salario_base_val, antiguedad, nivel_seleccionado, inflacion, competitividad, entorno_seleccionado, hse
+                cargo_seleccionado, salario_base_val, anos_val, nivel_seleccionado, 
+                inflacion_val, competitividad_val, entorno_seleccionado, hse_val
             )
         except Exception as e:
-            print("Error en cálculo:", e)
+            print("Aviso de error controlado en cálculo:", e)
+            resultado = None
             
     return render_template_string(
         HTML_TEMPLATE, 
@@ -232,9 +242,14 @@ def index():
         cargo_seleccionado=cargo_seleccionado,
         nivel_seleccionado=nivel_seleccionado,
         entorno_seleccionado=entorno_seleccionado,
-        salario_base_val=salario_base_val
+        salario_base_val=salario_base_val,
+        anos_val=anos_val,
+        inflacion_val=inflacion_val,
+        competitividad_val=competitividad_val,
+        hse_val=hse_val
     )
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+```[cite: 1]
