@@ -1,6 +1,88 @@
 import os
 from flask import Flask, render_template_string, request
-from calculadora_salarial import calcular_ajuste_salarial_petrolera, CATALOGO_CARGOS
+
+CATALOGO_CARGOS = {
+    "supervisor_campo": {"titulo": "Supervisor de Campo", "base": 400.0},
+    "supervisor_soldadura": {"titulo": "Supervisor de Soldadura", "base": 450.0},
+    "supervisor_electrico": {"titulo": "Supervisor Eléctrico", "base": 450.0},
+    "supervisor_mecanico": {"titulo": "Supervisor Mecánico", "base": 450.0},
+    "supervisor_operaciones_turno": {"titulo": "Supervisor de Operaciones de Turno", "base": 480.0},
+    "supervisor_laboral": {"titulo": "Supervisor Laboral", "base": 420.0},
+    "jefe_equipo": {"titulo": "Jefe de Equipo", "base": 550.0},
+    "superintendente": {"titulo": "Superintendente", "base": 750.0}
+}
+
+def calcular_ajuste_salarial_petrolera(
+    cargo_clave,
+    salario_base_custom,
+    anos_antiguedad,
+    nivel_profesionalismo,
+    porcentaje_inflacion,
+    indice_competitividad,
+    factor_riesgo_operativo,
+    tiene_certificacion_hse
+):
+    salario_base = salario_base_custom if salario_base_custom > 0 else CATALOGO_CARGOS.get(cargo_clave, {"base": 400.0})["base"]
+    
+    monto_inflacion = salario_base * (porcentaje_inflacion / 100)
+    
+    factor_antiguedad = 0.02
+    monto_antiguedad = salario_base * (anos_antiguedad * factor_antiguedad)
+    
+    pesos_profesionalismo = {
+        'tsu': 1.05,
+        'licenciado': 1.10,
+        'ingeniero': 1.15,
+        'medico': 1.18,
+        'abogado': 1.12,
+        'bachiller': 1.00
+    }
+    mult_prof = pesos_profesionalismo.get(nivel_profesionalismo.lower(), 1.0)
+    
+    salario_parcial = (salario_base + monto_inflacion + monto_antiguedad) * mult_prof
+    salario_competitivo = salario_parcial * indice_competitividad
+    
+    adicionales_riesgo = {
+        'oficina': 0.02,
+        'directivo': 0.05,
+        'operativo_campo': 0.10
+    }
+    adicional_riesgo = adicionales_riesgo.get(factor_riesgo_operativo.lower(), 0.03)
+    monto_riesgo = salario_competitivo * adicional_riesgo
+    
+    monto_hse = (salario_base * 0.05) if tiene_certificacion_hse else 0.0
+    salario_final = salario_competitivo + monto_riesgo + monto_hse
+    
+    titulos_academicos = {
+        'tsu': 'Técnico Superior Universitario (TSU)',
+        'licenciado': 'Licenciado',
+        'ingeniero': 'Ingeniero',
+        'medico': 'Médico',
+        'abogado': 'Abogado',
+        'bachiller': 'Bachiller en Ciencias'
+    }
+    
+    titulos_entorno = {
+        'oficina': 'Oficina (Administrativo)',
+        'directivo': 'Directivo / Ejecutivo',
+        'operativo_campo': 'Operativo en Campo (Locación)'
+    }
+    
+    resultado = {
+        "cargo_seleccionado": CATALOGO_CARGOS.get(cargo_clave, {"titulo": "Personal de Campo"}).get("titulo"),
+        "nivel_academico": titulos_academicos.get(nivel_profesionalismo.lower(), 'No especificado'),
+        "entorno_operativo": titulos_entorno.get(factor_riesgo_operativo.lower(), 'No especificado'),
+        "salario_base": round(salario_base, 2),
+        "ajuste_inflacion": round(monto_inflacion, 2),
+        "bono_antiguedad": round(monto_antiguedad, 2),
+        "bono_entorno_laboral": round(monto_riesgo, 2),
+        "bono_hse": round(monto_hse, 2),
+        "salario_ajustado": round(salario_final, 2),
+        "incremento_neto": round(salario_final - salario_base, 2),
+        "porcentaje_total_aumento": round(((salario_final - salario_base) / salario_base) * 100, 2)
+    }
+    
+    return resultado
 
 app = Flask(__name__)
 
@@ -11,104 +93,20 @@ HTML_TEMPLATE = """
     <meta charset="UTF-8">
     <title>MAG - Finanzas Petroleras</title>
     <style>
-        body { 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            background: #f4f4f6; 
-            color: #2b2d42; 
-            padding: 30px; 
-            margin: 0;
-        }
-        .container { 
-            max-width: 680px; 
-            margin: auto; 
-            background: #ffffff; 
-            padding: 35px; 
-            border-radius: 12px; 
-            box-shadow: 0 4px 20px rgba(43, 45, 66, 0.08); 
-            border: 1px solid #e2e8f0;
-        }
-        h1 { 
-            color: #1e293b; 
-            text-align: center; 
-            margin-bottom: 5px;
-            font-size: 24px;
-        }
-        .subtitle {
-            text-align: center;
-            color: #64748b;
-            font-size: 14px;
-            margin-bottom: 25px;
-            font-weight: 500;
-        }
-        .section-box {
-            background: #f8fafc;
-            border: 1px solid #cbd5e1;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 15px;
-        }
-        label { 
-            display: block; 
-            margin-top: 12px; 
-            font-weight: 600; 
-            color: #475569;
-            font-size: 13px;
-        }
-        input, select { 
-            width: 100%; 
-            padding: 10px; 
-            margin-top: 5px; 
-            border-radius: 6px; 
-            border: 1px solid #cbd5e1; 
-            background: #ffffff; 
-            color: #1e293b; 
-            box-sizing: border-box; 
-            font-size: 14px;
-        }
-        .checkbox-container {
-            display: flex;
-            align-items: center;
-            margin-top: 15px;
-        }
-        .checkbox-container input {
-            width: 20px;
-            height: 20px;
-            margin-right: 10px;
-        }
-        button { 
-            width: 100%; 
-            margin-top: 25px; 
-            padding: 14px; 
-            background: #334155; 
-            color: white; 
-            border: none; 
-            border-radius: 6px; 
-            font-size: 16px; 
-            cursor: pointer; 
-            font-weight: 600; 
-            transition: background 0.2s;
-        }
-        button:hover { 
-            background: #1e293b; 
-        }
-        .result { 
-            margin-top: 30px; 
-            background: #f8fafc; 
-            padding: 22px; 
-            border-radius: 8px; 
-            border: 1px solid #e2e8f0;
-            border-left: 5px solid #334155; 
-        }
-        .result h3 { 
-            margin-top: 0; 
-            color: #1e293b; 
-            font-size: 18px;
-        }
-        .result p {
-            margin: 6px 0;
-            color: #334155;
-            font-size: 14px;
-        }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f4f4f6; color: #2b2d42; padding: 30px; margin: 0; }
+        .container { max-width: 680px; margin: auto; background: #ffffff; padding: 35px; border-radius: 12px; box-shadow: 0 4px 20px rgba(43, 45, 66, 0.08); border: 1px solid #e2e8f0; }
+        h1 { color: #1e293b; text-align: center; margin-bottom: 5px; font-size: 24px; }
+        .subtitle { text-align: center; color: #64748b; font-size: 14px; margin-bottom: 25px; font-weight: 500; }
+        .section-box { background: #f8fafc; border: 1px solid #cbd5e1; padding: 15px; border-radius: 8px; margin-bottom: 15px; }
+        label { display: block; margin-top: 12px; font-weight: 600; color: #475569; font-size: 13px; }
+        input, select { width: 100%; padding: 10px; margin-top: 5px; border-radius: 6px; border: 1px solid #cbd5e1; background: #ffffff; color: #1e293b; box-sizing: border-box; font-size: 14px; }
+        .checkbox-container { display: flex; align-items: center; margin-top: 15px; }
+        .checkbox-container input { width: 20px; height: 20px; margin-right: 10px; }
+        button { width: 100%; margin-top: 25px; padding: 14px; background: #334155; color: white; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; font-weight: 600; transition: background 0.2s; }
+        button:hover { background: #1e293b; }
+        .result { margin-top: 30px; background: #f8fafc; padding: 22px; border-radius: 8px; border: 1px solid #e2e8f0; border-left: 5px solid #334155; }
+        .result h3 { margin-top: 0; color: #1e293b; font-size: 18px; }
+        .result p { margin: 6px 0; color: #334155; font-size: 14px; }
     </style>
     <script>
         const basesCargos = {
@@ -116,12 +114,10 @@ HTML_TEMPLATE = """
             "{{ clave }}": {{ info.base }},
             {% endfor %}
         };
-
         function actualizarSalarioBase() {
             const selectCargo = document.getElementById("cargo_clave");
             const inputSalario = document.getElementById("salario_base");
             const cargoSeleccionado = selectCargo.value;
-            
             if (basesCargos[cargoSeleccionado] !== undefined) {
                 inputSalario.value = basesCargos[cargoSeleccionado];
             }
@@ -252,4 +248,3 @@ def index():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
-```[cite: 1]
